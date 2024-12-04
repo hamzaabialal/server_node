@@ -1,8 +1,14 @@
 from django.urls import path
-from .views import BulkProductInsertView, LogView, PipelineView
+from rest_framework.routers import DefaultRouter
+from .views import ProductViewSet, aggregate_search, sync_databases
 
+# Create a router and register the ProductViewSet
+router = DefaultRouter()
+router.register(r'products', ProductViewSet, basename='product')
+
+# Now the `search` action and `bulk-insert` will be automatically included in the routes
 urlpatterns = [
-    path('products/bulk-insert/', BulkProductInsertView.as_view(), name='bulk-insert'),
-    path('log/', LogView.as_view(), name='log'),
-    path('pipeline/', PipelineView.as_view(), name='pipeline'),
-]
+    path('aggregate_search/', aggregate_search, name='aggregate-search'),
+    path('sync_databases/', sync_databases),
+
+              ] + router.urls  # Add the router URLs to the urlpatterns

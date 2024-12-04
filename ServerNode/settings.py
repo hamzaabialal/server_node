@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'shopify_database',
 ]
 
@@ -84,14 +85,29 @@ WSGI_APPLICATION = 'ServerNode.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ServerNode',                      # Name of the database
-        'USER': 'postgres',                      # PostgreSQL user
-        'PASSWORD': '12345',                  # Password for the user
-        'HOST': 'localhost',                       # Database host (use 'localhost' or IP)
-        'PORT': '5432',                            # Default PostgreSQL port
-    }
+        'NAME': 'node1_db',  # Use the database for the current node
+        'USER': 'node1_user',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    },
+    'node2': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'node2_db',
+        'USER': 'node1_user',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',  # Change port for node2
+    },
+    'node3': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'node3_db',
+        'USER': 'node1_user',
+        'PASSWORD': '12345',
+        'HOST': 'localhost',
+        'PORT': '5432',  # Change port for node3
+    },
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

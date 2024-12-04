@@ -4,7 +4,11 @@ from .models import Product, Pipeline, Log
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = '__all__'
+        fields = '__all__'  # or specify the fields you want to include
+
+    def create(self, validated_data):
+        db = self.context.get('db', 'default')  # Get the db from the context
+        return Product.objects.using(db).create(**validated_data)
 
 class PipelineSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,3 +19,8 @@ class LogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Log
         fields = '__all__'
+
+
+
+
+
