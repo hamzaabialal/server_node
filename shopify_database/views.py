@@ -1,9 +1,12 @@
 import threading
+from datetime import time
 from subprocess import run, CalledProcessError
 from rest_framework.decorators import action
 from .serializers import ProductSerializer
 from .models import Product
 from rest_framework import viewsets
+import time
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
@@ -115,28 +118,19 @@ class ProductViewSet(viewsets.ModelViewSet):
         db = request.query_params.get('db', 'default')
         products = Product.objects.using(db).filter(title__icontains=query)
         serializer = ProductSerializer(products, many=True)
-        return Response(serializer.data)
+        import time
+        import threading
+        import subprocess
+        from subprocess import CalledProcessError
+        from django.http import JsonResponse
+        from rest_framework.decorators import api_view
+        from rest_framework.response import Response
 
-
-
-
-# Helper function to run commands
-def run_command(command):
-    try:
-        run(command, shell=True, check=True)
-    except CalledProcessError as e:
-        print(f"Error occurred: {e}")
-# Function to run a command with sshpass for password authentication
-def run_command_with_password(command, password):
-    # Add sshpass to the command
-    full_command = f"sshpass -p {password} {command}"
-    run(full_command, shell=True, check=True)
-
-# Function to run commands with password using sshpass
+        # Function to run a command with password authentication
 def run_command_with_password(command, password):
     try:
         # Use sshpass to run the command
-        full_command = f"sshpass -p {password} {command}"
+        full_command = f"{command}"
         subprocess.run(full_command, shell=True, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {e}")
@@ -152,7 +146,6 @@ def sync_databases(request):
         target_nodes = request.data.get('target_nodes', [])
         ssh_password = request.data.get('ssh_password')  # Get SSH password from request data
 
-        # Ensure the required fields are provided
         if not source_db or not target_nodes or not ssh_password:
             return Response({"detail": "source_db, target_nodes, and ssh_password are required."}, status=400)
 
@@ -160,37 +153,58 @@ def sync_databases(request):
         dump_file = f"./backups/{source_db}_dump.sql"
         dump_command = f"pg_dump -U node1_user -h localhost -p 5432 {source_db} > {dump_file}"
         print(f"Running command: {dump_command}")
-        subprocess.run(dump_command, shell=True, check=True)
 
-        # Step 2: Transfer dump to the target nodes and initialize them
+        start_dump_time = time.time()
+        subprocess.run(dump_command, shell=True, check=True)
+        end_dump_time = time.time()
+        dump_time_taken = end_dump_time - start_dump_time
+        print(f"Database dump completed in {dump_time_taken:.2f} seconds.")
+
+        # Step 2: Transfer dump to the target nodes
+        transfer_times = {}
         threads = []
         for node in target_nodes:
-            # SCP command to transfer the dump file to the target node using sshpass for password
             scp_command = f"scp -o StrictHostKeyChecking=no ./backups/{source_db}_dump.sql user@{node}:"
+            transfer_start_time = time.time()
+
             thread = threading.Thread(target=run_command_with_password, args=(scp_command, ssh_password))
-            threads.append(thread)
+            threads.append((thread, node, transfer_start_time))
             thread.start()
 
         # Wait for all transfer threads to finish
-        for thread in threads:
+        for thread, node, transfer_start_time in threads:
             thread.join()
+            transfer_end_time = time.time()
+            transfer_times[node] = transfer_end_time - transfer_start_time
+            print(f"Transfer to {node} completed in {transfer_times[node]:.2f} seconds.")
 
-        # Step 3: Initialize target database by restoring the dump
+        # Step 3: Restore dump on target nodes
+        restore_times = {}
         for node in target_nodes:
             init_command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'psql -U node1_user -h {node} -p 5432 {source_db} < /{source_db}_dump.sql'"
             print(f"Running command: {init_command}")
+
+            restore_start_time = time.time()
             run_command_with_password(init_command, ssh_password)
+            restore_end_time = time.time()
+            restore_times[node] = restore_end_time - restore_start_time
+            print(f"Restore on {node} completed in {restore_times[node]:.2f} seconds.")
 
         # Clean up dump file
         clean_command = f"rm {dump_file}"
         subprocess.run(clean_command, shell=True, check=True)
 
-        return Response({"message": "Databases synced successfully."}, status=200)
+        analytics = {
+            "dump_time": f"{dump_time_taken:.2f} seconds",
+            "transfer_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in
+                               transfer_times.items()},
+            "restore_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in restore_times.items()},
+        }
+        return Response({"message": "Databases synced successfully.", "analytics": analytics}, status=200)
 
     except subprocess.CalledProcessError as e:
         print(f"Error during database sync: {str(e)}")
         return Response({"detail": f"Error during database sync: {str(e)}"}, status=500)
-
 
 
 # Aggregate Search API
@@ -212,3 +226,75 @@ def aggregate_search(request):
             results.append({"db": db, "error": f"Failed to query database: {str(e)}"})
 
     return Response(results)
+
+#
+# import paramiko
+# from scp import SCPClient
+# from time import time
+# import subprocess
+# from rest_framework.decorators import api_view
+# from rest_framework.response import Response
+#
+#
+# def dump_database(source_db):
+#     """Dump the database locally."""
+#     dump_file = f"./backups/{source_db}_dump.sql"
+#     dump_command = f"pg_dump -U node1_user -h localhost -p 5432 {source_db} > {dump_file}"
+#
+#     try:
+#         start_time = time()
+#         subprocess.run(dump_command, shell=True, check=True)
+#         dump_time = time() - start_time
+#         return dump_file, dump_time
+#     except subprocess.CalledProcessError as e:
+#         raise Exception(f"Database dump failed: {str(e)}")
+#
+#
+# def transfer_file_via_ssh(node, ssh_password, dump_file, username="user"):
+#     """Transfer the file to the target node using SSH with password."""
+#     try:
+#         ssh = paramiko.SSHClient()
+#         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+#
+#         # Connect to the target node using password authentication
+#         ssh.connect(hostname=node, username=username, password=ssh_password)
+#
+#         # Transfer the file using SCP
+#         with SCPClient(ssh.get_transport()) as scp:
+#             remote_path = f"/home/{username}/{dump_file.split('/')[-1]}"
+#             scp.put(dump_file, remote_path)
+#
+#         ssh.close()
+#         return remote_path
+#     except Exception as e:
+#         raise Exception(f"File transfer to {node} failed: {str(e)}")
+#
+#
+# @api_view(['POST'])
+# def sync_databases(request):
+#     """API to dump and transfer the database to target nodes."""
+#     source_db = request.data.get('source_db')
+#     target_nodes = request.data.get('target_nodes', [])
+#     ssh_password = request.data.get('ssh_password')  # SSH password for authentication
+#
+#     if not source_db or not target_nodes or not ssh_password:
+#         return Response({"error": "source_db, target_nodes, and ssh_password are required."}, status=400)
+#
+#     try:
+#         # Step 1: Dump the database
+#         dump_file, dump_time = dump_database(source_db)
+#
+#         # Step 2: Transfer the file to each target node
+#         transfer_details = []
+#         for node in target_nodes:
+#             print(f"Transferring to {node}...")
+#             remote_path = transfer_file_via_ssh(node, ssh_password, dump_file)
+#             transfer_details.append({"node": node, "remote_path": remote_path})
+#
+#         return Response({
+#             "message": "Operation completed successfully.",
+#             "dump_time": dump_time,
+#             "transfers": transfer_details
+#         })
+#     except Exception as e:
+#         return Response({"error": str(e)}, status=500)
