@@ -1,6 +1,8 @@
 import threading
 from datetime import time
 from subprocess import run, CalledProcessError
+
+from django.views.generic import TemplateView
 from rest_framework.decorators import action
 from .serializers import ProductSerializer
 from .models import Product
@@ -127,14 +129,112 @@ class ProductViewSet(viewsets.ModelViewSet):
         from rest_framework.response import Response
 
         # Function to run a command with password authentication
+# def run_command_with_password(command, password):
+#     try:
+#         # Use sshpass to run the command
+#         full_command = f"{command}"
+#         subprocess.run(full_command, shell=True, check=True)
+#     except subprocess.CalledProcessError as e:
+#         print(f"Command failed: {e}")
+#         raise e
+#
+# @api_view(['POST'])
+# def sync_databases(request):
+#     try:
+#         # Log the incoming request data
+#         print("Request data:", request.data)
+#
+#         source_db = request.data.get('source_db')
+#         target_nodes = request.data.get('target_nodes', [])
+#         ssh_password = request.data.get('ssh_password')  # Get SSH password from request data
+#
+#         if not source_db or not target_nodes or not ssh_password:
+#             return Response({"detail": "source_db, target_nodes, and ssh_password are required."}, status=400)
+#
+#         # Step 1: Dump the source database
+#         dump_file = f"./backups/{source_db}_dump.sql"
+#         dump_command = f"pg_dump -U node1_user -h localhost -p 5432 {source_db} > {dump_file}"
+#         print(f"Running command: {dump_command}")
+#
+#         start_dump_time = time.time()
+#         subprocess.run(dump_command, shell=True, check=True)
+#         end_dump_time = time.time()
+#         dump_time_taken = end_dump_time - start_dump_time
+#         print(f"Database dump completed in {dump_time_taken:.2f} seconds.")
+#
+#         # Step 2: Transfer dump to the target nodes
+#         transfer_times = {}
+#         threads = []
+#         for node in target_nodes:
+#             scp_command = f"scp -o StrictHostKeyChecking=no ./backups/{source_db}_dump.sql user@{node}:"
+#             transfer_start_time = time.time()
+#
+#             thread = threading.Thread(target=run_command_with_password, args=(scp_command, ssh_password))
+#             threads.append((thread, node, transfer_start_time))
+#             thread.start()
+#
+#         # Wait for all transfer threads to finish
+#         for thread, node, transfer_start_time in threads:
+#             thread.join()
+#             transfer_end_time = time.time()
+#             transfer_times[node] = transfer_end_time - transfer_start_time
+#             print(f"Transfer to {node} completed in {transfer_times[node]:.2f} seconds.")
+#
+#         # Step 3: Restore dump on target nodes
+#         restore_times = {}
+#         for node in target_nodes:
+#             init_command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'psql -U node1_user -h {node} -p 5432 {source_db} < /{source_db}_dump.sql'"
+#             print(f"Running command: {init_command}")
+#
+#             restore_start_time = time.time()
+#             run_command_with_password(init_command, ssh_password)
+#             restore_end_time = time.time()
+#             restore_times[node] = restore_end_time - restore_start_time
+#             print(f"Restore on {node} completed in {restore_times[node]:.2f} seconds.")
+#
+#         # Clean up dump file
+#         clean_command = f"rm {dump_file}"
+#         subprocess.run(clean_command, shell=True, check=True)
+#
+#         analytics = {
+#             "dump_time": f"{dump_time_taken:.2f} seconds",
+#             "transfer_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in
+#                                transfer_times.items()},
+#             "restore_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in restore_times.items()},
+#         }
+#         return Response({"message": "Databases synced successfully.", "analytics": analytics}, status=200)
+#
+#     except subprocess.CalledProcessError as e:
+#         print(f"Error during database sync: {str(e)}")
+#         return Response({"detail": f"Error during database sync: {str(e)}"}, status=500)
+import os
+import subprocess
+import threading
+import time
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+
 def run_command_with_password(command, password):
     try:
         # Use sshpass to run the command
-        full_command = f"{command}"
+        full_command = f"sshpass -p {password} {command}"
         subprocess.run(full_command, shell=True, check=True)
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {e}")
         raise e
+
+
+def get_node_storage(node, ssh_password):
+    try:
+        # Run a command to get available storage on the target node
+        command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'df -h / --output=avail | tail -1'"
+        result = subprocess.check_output(command, shell=True, text=True).strip()
+        print(f"Available storage on {node}: {result}")
+        return result
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to get storage info for {node}: {e}")
+        return "Unknown"
+
 
 @api_view(['POST'])
 def sync_databases(request):
@@ -164,7 +264,7 @@ def sync_databases(request):
         transfer_times = {}
         threads = []
         for node in target_nodes:
-            scp_command = f"scp -o StrictHostKeyChecking=no ./backups/{source_db}_dump.sql user@{node}:"
+            scp_command = f"scp -o StrictHostKeyChecking=no {dump_file} user@{node}:/tmp/"
             transfer_start_time = time.time()
 
             thread = threading.Thread(target=run_command_with_password, args=(scp_command, ssh_password))
@@ -178,33 +278,60 @@ def sync_databases(request):
             transfer_times[node] = transfer_end_time - transfer_start_time
             print(f"Transfer to {node} completed in {transfer_times[node]:.2f} seconds.")
 
-        # Step 3: Restore dump on target nodes
+        # Step 3: Check node health and storage
+        node_health = {}
+        node_storage = {}
+        for node in target_nodes:
+            try:
+                health_command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'echo Node is Up'"
+                subprocess.check_output(health_command, shell=True, text=True).strip()
+                node_health[node] = "Up"
+            except subprocess.CalledProcessError:
+                node_health[node] = "Down"
+
+            # Retrieve available storage
+            node_storage[node] = get_node_storage(node, ssh_password)
+
+        # Step 4: Restore dump on target nodes (only if the node is up)
         restore_times = {}
         for node in target_nodes:
-            init_command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'psql -U node1_user -h {node} -p 5432 {source_db} < /{source_db}_dump.sql'"
-            print(f"Running command: {init_command}")
+            if node_health[node] == "Up":
+                restore_command = f"sshpass -p {ssh_password} ssh -o StrictHostKeyChecking=no user@{node} 'psql -U node1_user -h {node} -p 5432 {source_db} < /tmp/{source_db}_dump.sql'"
+                print(f"Running command: {restore_command}")
 
-            restore_start_time = time.time()
-            run_command_with_password(init_command, ssh_password)
-            restore_end_time = time.time()
-            restore_times[node] = restore_end_time - restore_start_time
-            print(f"Restore on {node} completed in {restore_times[node]:.2f} seconds.")
+                restore_start_time = time.time()
+                run_command_with_password(restore_command, ssh_password)
+                restore_end_time = time.time()
+                restore_times[node] = restore_end_time - restore_start_time
+                print(f"Restore on {node} completed in {restore_times[node]:.2f} seconds.")
+            else:
+                print(f"Skipping restore for {node} as the node is down.")
 
-        # Clean up dump file
-        clean_command = f"rm {dump_file}"
-        subprocess.run(clean_command, shell=True, check=True)
+        # Clean up dump file locally
+        if os.path.exists(dump_file):
+            try:
+                os.remove(dump_file)
+                print("Local dump file deleted.")
+            except Exception as e:
+                print(f"Error deleting dump file: {e}")
 
+        # Construct analytics data
         analytics = {
             "dump_time": f"{dump_time_taken:.2f} seconds",
-            "transfer_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in
-                               transfer_times.items()},
+            "transfer_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in transfer_times.items()},
             "restore_times": {node: f"{time_taken:.2f} seconds" for node, time_taken in restore_times.items()},
+            "node_health": node_health,
+            "node_storage": node_storage,
         }
+
         return Response({"message": "Databases synced successfully.", "analytics": analytics}, status=200)
 
     except subprocess.CalledProcessError as e:
         print(f"Error during database sync: {str(e)}")
         return Response({"detail": f"Error during database sync: {str(e)}"}, status=500)
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        return Response({"detail": f"Unexpected error: {str(e)}"}, status=500)
 
 
 # Aggregate Search API
@@ -226,6 +353,22 @@ def aggregate_search(request):
             results.append({"db": db, "error": f"Failed to query database: {str(e)}"})
 
     return Response(results)
+
+class DashboardTemplateView(TemplateView):
+    template_name = 'inventory.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['nodes'] = ['node1', 'node2', 'node3']
+        return context
+
+class Dashboard1TemplateView(TemplateView):
+    template_name = 'student-dashboard.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['nodes'] = ['node1', 'node2', 'node3']
+        return context
 
 #
 # import paramiko
@@ -298,3 +441,113 @@ def aggregate_search(request):
 #         })
 #     except Exception as e:
 #         return Response({"error": str(e)}, status=500)
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from bs4 import BeautifulSoup
+import requests
+import re
+
+# Define the price patterns (same as the ones in your script)
+price_patterns = [
+    r'[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]\s?\d+(?:,\d{3})*(?:\.\d{1,2})?',  # Common and extended currency symbols (prefix)
+    r'\d+(?:,\d{3})*(?:\.\d{1,2})?\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]',  # Postfix currency symbols
+    r'[\d,]+\.\d{1,2}\s?(USD|EUR|GBP|INR|JPY|CAD|AUD|CNY|CHF|AED|SAR|KWD|QAR|OMR|BHD|EGP)',  # Currency names (extended)
+    r'[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?\s?[-–]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?',  # Price ranges
+    r'(only|just|starting at|from)?\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?',  # Inline prices
+    r'price["\']?\s?:\s?["\']?\d+(?:\.\d{1,2})?',  # JSON or attributes
+    r'was\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?,?\s?now\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?',  # Discounted prices
+    r'(class|id|name)["\']?\s?:?\s?["\']?(price|cost)["\']?[^>]*>?\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:\.\d{1,2})?',  # HTML attributes
+    r'[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]\d{1,3}(?:,\d{3})*\b',  # Shorthand currency without decimals
+    r'[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Currency followed by a decimal number
+    r'(sale|discount)\s?price\s?[:=]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Sale or discount price
+    r'(per|each)\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Per unit pricing
+    r'(above|below|over|under|around|approx)\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Approximate price
+    r'([\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\d+(?:,\d{3})*(?:\.\d+)?\s?x\s?\d+)',  # Bundled pricing (e.g., $10 x 5)
+    r'(total|subtotal)\s?[:=]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Total or subtotal
+    r'(min|max|average|avg|median)\s?(price|cost)\s?[:=]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Statistical prices
+    r'free\s?\(?\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d*(?:\.\d+)?\)?',  # Free pricing with or without optional cost
+    r'(bundle|package)\s?(of)?\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Package pricing
+    r'(regular\s?price)\s?[:=]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Regular prices
+]
+
+
+class ScrapeProductsView(APIView):
+    def get(self, request, *args, **kwargs):
+        # Define the parent sitemap URL
+        parent_sitemap_url = "https://zuhd.store/sitemap.xml"
+
+        # Function to fetch and parse XML sitemap
+        def fetch_sitemap(url):
+            try:
+                response = requests.get(url, timeout=10)
+                if response.status_code == 200:
+                    return BeautifulSoup(response.content, "xml")
+                else:
+                    print(f"Failed to fetch sitemap: {url} (Status Code: {response.status_code})")
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching sitemap: {url} - {e}")
+            return None
+
+        # Function to scrape product details
+        def scrape_product_details(product_url):
+            product_data = {
+                "url": product_url,
+                "price": None,
+                "meta_title": None,
+                "meta_description": None,
+                "image_url": None
+            }
+            try:
+                response = requests.get(product_url, timeout=10)
+                if response.status_code == 200:
+                    html = response.text
+                    # Extract price using regex patterns
+                    for pattern in price_patterns:
+                        match = re.search(pattern, html)
+                        if match:
+                            product_data["price"] = match.group()
+                            break
+
+                    # Extract meta title and description
+                    soup = BeautifulSoup(html, "html.parser")
+                    product_data["meta_title"] = soup.find("title").text if soup.find("title") else None
+                    meta_description = soup.find("meta", attrs={"name": "description"})
+                    product_data["meta_description"] = meta_description["content"] if meta_description else None
+                else:
+                    print(f"Failed to fetch product page: {product_url} (Status Code: {response.status_code})")
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching product details for {product_url}: {e}")
+            return product_data
+
+        # Function to process product sitemaps
+        def process_product_sitemap(sitemap_url):
+            product_details = []
+            sitemap = fetch_sitemap(sitemap_url)
+            if sitemap:
+                for url_tag in sitemap.find_all("url"):
+                    try:
+                        product_url = url_tag.find("loc").text
+                        image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
+                        if image_url:  # Only proceed if image_url is present
+                            product_data = scrape_product_details(product_url)
+                            product_data["image_url"] = image_url
+                            product_details.append(product_data)
+                    except Exception as e:
+                        print(f"Error processing product URL: {e}")
+            return product_details
+
+        # Main logic to process sitemaps and gather all product details
+        parent_sitemap = fetch_sitemap(parent_sitemap_url)
+        all_product_details = []
+        if parent_sitemap:
+            product_sitemaps = [
+                sitemap.find("loc").text for sitemap in parent_sitemap.find_all("sitemap")
+                if "products" in sitemap.find("loc").text
+            ]
+            for product_sitemap_url in product_sitemaps:
+                print(f"Processing sitemap: {product_sitemap_url}")
+                all_product_details.extend(process_product_sitemap(product_sitemap_url))
+
+        return Response(all_product_details, status=status.HTTP_200_OK)

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webix Dashboard for Teachers</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="dash.css">
+</head>
+<body>
+            <!-- Header -->
+    <div class="dashboard-header d-flex justify-content-between align-items-center">
+        <h1 class="h5 m-0">Webix Dashboard for Teachers</h1>
+        <div class="theme-toggle"><i class="fa-solid fa-droplet"></i></div>
+    </div>
+    <div class="container-fluid">
+        <!-- Main Grid -->
+        <div class="row">
+            <!-- Grade by Student -->
+            <div class="col-md-4">
+                <div class="student-performance-card">
+                    <div class="student-performance-card-header">
+                        <h2 class="student-performance-card-title">Grade by student</h2>
+                        <span class="help-icon">?</span>
+                    </div>
+                    <div class="student-list" id="studentList">
+                        <!-- Students will be populated by JavaScript -->
+                    </div>
+                </div>
+            
+            </div>
+
+            <!-- Grade by Subjects -->
+            <div class="col-md-8">
+                <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Grade student by Subjects</h2>
+            <span class="help-icon">?</span>
+        </div>
+        <div class="student-list" id="studentList">
+            <!-- Students will be populated by JavaScript -->
+        </div> <div class="container">            
+            <div class="grade-container">
+                <div class="subjects">
+                    <!-- Added more subjects to demonstrate scrolling -->
+                    <div class="subject-bubble">English</div>
+                    <div class="subject-bubble">History</div>
+                    <div class="subject-bubble">Arts</div>
+                    <div class="subject-bubble">Literature</div>
+                    <div class="subject-bubble">Geography</div>
+                    <div class="subject-bubble">Maths</div>
+                    <div class="subject-bubble">Physics</div>
+                    <!-- <div class="subject-bubble">Chemistry</div>
+                    <div class="subject-bubble">Biology</div>
+                    <div class="subject-bubble">Computer Science</div>
+                    <div class="subject-bubble">Music</div>
+                    <div class="subject-bubble">Physical Education</div> -->
+                </div>
+                
+                <div class="chart">
+                    <!-- Added more subjects to demonstrate scrolling -->
+                    <div class="bar-container">
+                        <div class="subject-label">English</div>
+                        <div class="bar-wrapper">
+                            <div class="bar english-bar" style="width: 65%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="bar-container">
+                        <div class="subject-label">Arts</div>
+                        <div class="bar-wrapper">
+                            <div class="bar arts-bar" style="width: 55%;"></div>
+                        </div>
+                    </div>
+<!--     
+                    <div class="bar-container">
+                        <div class="subject-label">History</div>
+                        <div class="bar-wrapper">
+                            <div class="bar english-bar" style="width: 45%;"></div>
+                        </div>
+                    </div>
+    
+                    <div class="bar-container">
+                        <div class="subject-label">Literature</div>
+                        <div class="bar-wrapper">
+                            <div class="bar arts-bar" style="width: 70%;"></div>
+                        </div>
+                    </div>
+    
+                    <div class="bar-container">
+                        <div class="subject-label">Geography</div>
+                        <div class="bar-wrapper">
+                            <div class="bar english-bar" style="width: 58%;"></div>
+                        </div>
+                    </div>
+    
+                    <div class="bar-container">
+                        <div class="subject-label">Maths</div>
+                        <div class="bar-wrapper">
+                            <div class="bar arts-bar" style="width: 75%;"></div>
+                        </div>
+                    </div>
+     -->
+                    <div class="scale">
+                        <span>0</span>
+                        <span>10</span>
+                        <span>20</span>
+                        <span>30</span>
+                        <span>40</span>
+                        <span>50</span>
+                        <span>60</span>
+                        <span>70</span>
+                        <span>80</span>
+                        <span>90</span>
+                        <span>100</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+                <!-- Individual Average Grade -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title">Individual average grade</h2>
+                        <span class="help-icon">?</span>
+                    </div>
+                    <div class="grade-chart">
+                        <canvas id="gradeChart"></canvas>
+                        <!-- <div class="month-labels">
+                            <span>Oct.</span>
+                            <span>Nov.</span>
+                            <span>Dec.</span>
+                            <span>Jan.</span>
+                            <span>Feb.</span>
+                            <span>Mar.</span>
+                            <span>Apr.</span>
+                            <span>May</span>
+                            <span>June</span>
+                        </div> -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Students Progress -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Students progress</h2>
+                <span class="help-icon">?</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table progress-table mb-0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Curriculum progress</th>
+                            <th>Achievement (%)</th>
+                            <th>Completed (%)</th>
+                            <th>Solved this week</th>
+                            <th>Solved total</th>
+                            <th>Last worked on</th>
+                            <th>Last seen</th>
+                            <th>Assignments</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="student-name">Floria Manry</td>
+                            <td>
+                                <div class="progress">
+                                    <div class="progress-bar progress-green" style="width: 60%"></div>
+                                </div>
+                            </td>
+                            <td>55 <span class="trend-up">↑5</span></td>
+                            <td>74 <span class="trend-up">↑23</span></td>
+                            <td>20 <span class="trend-up">↑6</span></td>
+                            <td>165</td>
+                            <td>Lesson 4-3</td>
+                            <td>22 minutes ago</td>
+                            <td>✓1 ✗1</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="navigation">
+            <a href="#" class="text-white text-decoration-none">← QA Dashboard</a>
+            <div class="nav-dots">
+                <div class="dot"></div>
+                <div class="dot active"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-light">Read More</button>
+                <button class="btn btn-purple">Download Webix</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script>
+        // Line chart for Individual average grade
+        const ctx = document.getElementById('gradeChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Oct.', 'Nov.', 'Dec.', 'Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'June'],
+                datasets: [{
+                    label: 'Avg. performance',
+                    data: [60, 62, 61, 63, 62, 64, 63, 65, 64],
+                    borderColor: '#9c27b0',
+                    backgroundColor: 'transparent',
+                    tension: 0.4
+                }, {
+                    label: 'Floria Manry',
+                    data: [55, 57, 56, 58, 57, 59, 58, 60, 59],
+                    borderColor: '#4cd964',
+                    backgroundColor: 'transparent',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+          // Student data
+          const students = [
+            { name: 'Floria Manry', grade: 55 },
+            { name: 'Ozella Theiss', grade: 54 },
+            { name: 'Hue Madry', grade: 57 },
+            { name: 'Sabrina Clontz', grade: 55 },
+            { name: 'John Smith', grade: 58 },
+            { name: 'Emma Wilson', grade: 56 },
+            { name: 'Michael Brown', grade: 59 },
+            { name: 'Sarah Davis', grade: 53 },
+            { name: 'James Johnson', grade: 58 },
+            { name: 'Lisa Anderson', grade: 55 },
+            { name: 'Robert Taylor', grade: 56 },
+            { name: 'Jennifer Martin', grade: 57 },
+            { name: 'William Thompson', grade: 54 },
+            { name: 'Elizabeth White', grade: 58 },
+            { name: 'David Garcia', grade: 55 }
+        ];
+
+        // Function to determine grade color
+        function getGradeColor(grade) {
+            if (grade >= 60) return 'grade-green';
+            if (grade >= 57) return 'grade-yellow';
+            return 'grade-red';
+        }
+
+        // Function to render students
+        function renderStudents() {
+            const studentList = document.getElementById('studentList');
+            studentList.innerHTML = students.map(student => `
+                <div class="student-item">
+                    <span class="student-name">${student.name}</span>
+                    <span class="grade-pill ${getGradeColor(student.grade)}">${student.grade} %</span>
+                </div>
+            `).join('');
+        }
+
+        // Initialize the card
+        renderStudents();
+    </script>
+</body>
+</html>

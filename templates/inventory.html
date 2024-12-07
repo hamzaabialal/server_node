@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Sidebar Styles */
+        .sidebar {
+            width: 60px;
+            position: fixed;
+            top: 60px;
+            left: 0;
+            height: calc(100vh - 60px);
+            background: #707070;
+            transition: 0.3s;
+            border-right: 1px solid #eee;
+            z-index: 1000;
+        }
+
+        .sidebar-item {
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            color: #ebe0e0;
+        }
+
+        .sidebar-item:hover {
+            background: #a7caee;
+        }
+
+        /* Navbar Styles */
+        .top-navbar {
+            height: 60px;
+            background: #fff;
+            border-bottom: 1px solid #eee;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1001;
+        }
+
+        .main-content {
+            margin-left: 60px;
+            margin-top: 60px;
+            padding: 20px;
+        }
+
+        /* Table Styles */
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+
+        .status-deprecated {
+            background-color: #e9ecef;
+        }
+
+        .status-taken {
+            background-color: #22b8cf;
+            color: white;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            padding-left: 35px;
+            border-radius: 4px;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+        }
+
+        /* Progress Circle Styles */
+        .progress-circle {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: auto;
+        }
+
+        .progress-circle svg {
+            transform: rotate(-90deg);
+        }
+
+        .progress-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .progress-label {
+            text-align: center;
+            margin-top: 10px;
+            color: #666;
+        }
+
+        .stats-row {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        .action-icon {
+            cursor: pointer;
+            padding: 5px;
+            color: #666;
+        }
+        .progress-circle {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin: auto;
+    }
+
+    .progress-circle svg {
+      transform: rotate(-90deg);
+    }
+
+    .circle-label {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .card {
+      margin-bottom: 20px;
+      padding-right: 20px;
+    }
+
+    .stats-row span {
+      color: #666;
+    }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="top-navbar d-flex align-items-center px-3 justify-content-between">
+        <div class="d-flex align-items-center">
+            <button class="btn" id="menu-toggle">☰</button>
+            <h5 class="mb-0 ms-3">INVENTORY APP</h5>
+        </div>
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-info text-white d-flex align-items-center justify-content-center" 
+                 style="width: 35px; height: 35px;">O</div>
+            <span class="ms-2">Owner</span>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-item">
+            <i class="fas fa-th-large"></i>
+        </div>
+        <div class="sidebar-item">
+            <i class="fas fa-users"></i>
+        </div>
+        <div class="sidebar-item">
+            <i class="fas fa-chart-bar"></i>
+        </div>
+        <div class="sidebar-item">
+            <i class="fas fa-cog"></i>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="row">
+            <!-- Table Section -->
+            <div class="col-lg-9">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="mb-0">All units</h5>
+                            <div class="d-flex gap-3">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" class="form-control" placeholder="Search...">
+                                </div>
+                                <button class="btn btn-light"><i class="fas fa-sync-alt"></i></button>
+                                <button class="btn btn-light"><i class="fas fa-plus"></i></button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table" id="inventory-table">
+                                <thead>
+                                    <tr>
+                                        <th>Status</th>
+                                        <th>Serial</th>
+                                        <th>Type</th>
+                                        <th>Name</th>
+                                        <th>Assigned to</th>
+                                        <th>From</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Section -->
+          <div class="col-lg-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-4" id="computer"></div>
+          <div class="col-4" id="processor"></div>
+          <div class="col-4" id="hardDisk"></div>
+        </div>
+        <div class="stats-row mt-4">
+          <div class="d-flex justify-content-between mb-2">
+            <span>Available</span>
+            <span>1 pcs</span>
+          </div>
+          <div class="d-flex justify-content-between mb-2">
+            <span>Broken</span>
+            <span>1 pcs</span>
+          </div>
+          <div class="d-flex justify-content-between">
+            <span>Deprecated</span>
+            <span>7 pcs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <div class="row">
+          <div class="col-6" id="memory"></div>
+          <div class="col-6" id="monitor"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sample data
+        const inventoryData = [
+            { status: 'Deprecated', serial: 'PC-00001', type: 'Computer', name: 'Dell X2', assignedTo: '', from: '11 March 2015' },
+            { status: 'Deprecated', serial: 'CPU-00001', type: 'Processor', name: 'I5-3200', assignedTo: '', from: '11 March 2015' },
+            { status: 'Deprecated', serial: 'HDD-00001', type: 'Hard Disk', name: '160', assignedTo: '', from: '11 March 2015' },
+            { status: 'Deprecated', serial: 'RAM-00001', type: 'Memory', name: '8', assignedTo: '', from: '11 March 2015' },
+            { status: 'Taken', serial: 'PC-00003', type: 'Computer', name: 'Dell X2', assignedTo: 'Myles Munoz', from: '11 March 2015' }
+        ];
+
+        // Create progress circles
+        function createProgressCircle(element) {
+            const value = element.dataset.value;
+            const label = element.dataset.label;
+            const radius = 50;
+            const circumference = 2 * Math.PI * radius;
+            const progress = (value / 100) * circumference;
+
+            element.innerHTML = `
+                <svg width="120" height="120">
+                    <circle cx="60" cy="60" r="${radius}" fill="transparent" stroke="#eee" stroke-width="8"/>
+                    <circle cx="60" cy="60" r="${radius}" fill="transparent" stroke="#22b8cf" 
+                            stroke-width="8" stroke-dasharray="${progress} ${circumference}"/>
+                </svg>
+                <div class="progress-value">${value}%</div>
+                <div class="progress-label">${label}</div>
+            `;
+        }
+
+        // Populate table
+        function populateTable() {
+            const tableBody = document.querySelector('#inventory-table tbody');
+            tableBody.innerHTML = inventoryData.map(item => `
+                <tr>
+                    <td>
+                        <span class="status-badge ${item.status === 'Deprecated' ? 'status-deprecated' : 'status-taken'}">
+                            ${item.status}
+                        </span>
+                    </td>
+                    <td>${item.serial}</td>
+                    <td>
+                        <i class="fas fa-${getIconForType(item.type)} me-2"></i>
+                        ${item.type}
+                    </td>
+                    <td>${item.name}</td>
+                    <td>${item.assignedTo}</td>
+                    <td>${item.from}</td>
+                </tr>
+            `).join('');
+        }
+
+        function getIconForType(type) {
+            const icons = {
+                'Computer': 'desktop',
+                'Processor': 'microchip',
+                'Hard Disk': 'hdd',
+                'Memory': 'memory'
+            };
+            return icons[type] || 'question';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.progress-circle').forEach(createProgressCircle);
+            populateTable();
+
+            // Toggle sidebar
+            document.getElementById('menu-toggle').addEventListener('click', () => {
+                document.querySelector('.sidebar').classList.toggle('expanded');
+            });
+
+            // Search functionality
+            document.querySelector('.search-box input').addEventListener('input', (e) => {
+                const searchTerm = e.target.value.toLowerCase();
+                const rows = document.querySelectorAll('#inventory-table tbody tr');
+                
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    row.style.display = text.includes(searchTerm) ? '' : 'none';
+                });
+            });
+        });
+        function createProgressCircle(container, value, label) {
+      const circle = document.createElement('div');
+      circle.className = 'progress-circle';
+      
+      const svg = `
+        <svg viewBox="0 0 36 36">
+          <path d="M18 2.0845
+            a 15.9155 15.9155 0 0 1 0 31.831
+            a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="#eee"
+            stroke-width="3"/>
+          <path d="M18 2.0845
+            a 15.9155 15.9155 0 0 1 0 31.831
+            a 15.9155 15.9155 0 0 1 0 -31.831"
+            fill="none"
+            stroke="#03a9f4"
+            stroke-width="3"
+            stroke-dasharray="${value}, 100"/>
+        </svg>
+        <div class="circle-label">
+          ${label}<br>${value}%
+        </div>
+      `;
+      
+      circle.innerHTML = svg;
+      document.getElementById(container).appendChild(circle);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      createProgressCircle('computer', 100, 'Computer');
+      createProgressCircle('processor', 100, 'Processor');
+      createProgressCircle('hardDisk', 100, 'Hard Disk');
+      createProgressCircle('memory', 97, 'Memory');
+      createProgressCircle('monitor', 100, 'Monitor');
+    });
+    </script>
+</body>
+</html>
