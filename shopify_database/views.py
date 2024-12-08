@@ -2,9 +2,13 @@ import threading
 from datetime import time
 from subprocess import run, CalledProcessError
 
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
+from requests.adapters import HTTPAdapter
 from rest_framework.decorators import action
-from .serializers import ProductSerializer
+from urllib3 import Retry
+
+from .serializers import ProductSerializer, ScrapingResponseSerializer
 from .models import Product
 from rest_framework import viewsets
 import time
@@ -472,82 +476,310 @@ price_patterns = [
     r'(regular\s?price)\s?[:=]\s?[\$€£₹¥₩₽₦₵₪฿៛₫₲₴₭₮₵₠₡₢₣₤₧₨₩₯₺₼₾₹]?\s?\d+(?:,\d{3})*(?:\.\d+)?',  # Regular prices
 ]
 
+#
+# class ScrapeProductsView(APIView):
+#     def get(self, request, *args, **kwargs):
+#         # Define the parent sitemap URL
+#         parent_sitemap_url = "https://zuhd.store/sitemap.xml"
+#
+#         # Function to fetch and parse XML sitemap
+#         def fetch_sitemap(url):
+#             try:
+#                 response = requests.get(url, timeout=10)
+#                 if response.status_code == 200:
+#                     return BeautifulSoup(response.content, "xml")
+#                 else:
+#                     print(f"Failed to fetch sitemap: {url} (Status Code: {response.status_code})")
+#             except requests.exceptions.RequestException as e:
+#                 print(f"Error fetching sitemap: {url} - {e}")
+#             return None
+#
+#         # Function to scrape product details
+#         def scrape_product_details(product_url):
+#             product_data = {
+#                 "url": product_url,
+#                 "price": None,
+#                 "meta_title": None,
+#                 "meta_description": None,
+#                 "image_url": None
+#             }
+#             try:
+#                 response = requests.get(product_url, timeout=10)
+#                 if response.status_code == 200:
+#                     html = response.text
+#                     # Extract price using regex patterns
+#                     for pattern in price_patterns:
+#                         match = re.search(pattern, html)
+#                         if match:
+#                             product_data["price"] = match.group()
+#                             break
+#
+#                     # Extract meta title and description
+#                     soup = BeautifulSoup(html, "html.parser")
+#                     product_data["meta_title"] = soup.find("title").text if soup.find("title") else None
+#                     meta_description = soup.find("meta", attrs={"name": "description"})
+#                     product_data["meta_description"] = meta_description["content"] if meta_description else None
+#                 else:
+#                     print(f"Failed to fetch product page: {product_url} (Status Code: {response.status_code})")
+#             except requests.exceptions.RequestException as e:
+#                 print(f"Error fetching product details for {product_url}: {e}")
+#             return product_data
+#
+#         # Function to process product sitemaps
+#         def process_product_sitemap(sitemap_url):
+#             product_details = []
+#             sitemap = fetch_sitemap(sitemap_url)
+#             if sitemap:
+#                 for url_tag in sitemap.find_all("url"):
+#                     try:
+#                         product_url = url_tag.find("loc").text
+#                         image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
+#                         if image_url:  # Only proceed if image_url is present
+#                             product_data = scrape_product_details(product_url)
+#                             product_data["image_url"] = image_url
+#                             product_details.append(product_data)
+#                     except Exception as e:
+#                         print(f"Error processing product URL: {e}")
+#             return product_details
+#
+#         # Main logic to process sitemaps and gather all product details
+#         parent_sitemap = fetch_sitemap(parent_sitemap_url)
+#         all_product_details = []
+#         if parent_sitemap:
+#             product_sitemaps = [
+#                 sitemap.find("loc").text for sitemap in parent_sitemap.find_all("sitemap")
+#                 if "products" in sitemap.find("loc").text
+#             ]
+#             for product_sitemap_url in product_sitemaps:
+#                 print(f"Processing sitemap: {product_sitemap_url}")
+#                 all_product_details.extend(process_product_sitemap(product_sitemap_url))
+#
+#         return Response(all_product_details, status=status.HTTP_200_OK)
+#
+import time
+import threading
+import requests
+import csv
+import argparse
+import sqlite3
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from webdriver_manager.chrome import ChromeDriverManager
+import together
+import os
+from django.http import JsonResponse
+from django.views import View
 
-class ScrapeProductsView(APIView):
-    def get(self, request, *args, **kwargs):
-        # Define the parent sitemap URL
-        parent_sitemap_url = "https://zuhd.store/sitemap.xml"
+# Load API key from environment variable
+api_key = os.getenv('TOGETHER_API_KEY')
 
-        # Function to fetch and parse XML sitemap
-        def fetch_sitemap(url):
-            try:
-                response = requests.get(url, timeout=10)
-                if response.status_code == 200:
-                    return BeautifulSoup(response.content, "xml")
-                else:
-                    print(f"Failed to fetch sitemap: {url} (Status Code: {response.status_code})")
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching sitemap: {url} - {e}")
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+
+import sys
+import threading
+
+import threading
+from django.http import JsonResponse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
+import threading
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.keys import Keys
+from urllib.parse import urlparse
+import requests
+from bs4 import BeautifulSoup
+from .models import Product  # Adjust based on your model import location
+import together
+
+import threading
+import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from urllib.parse import urlparse
+from bs4 import BeautifulSoup
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
+from shopify_database.models import Product
+import together
+import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product  # Import the Product model
+from .serializers import ScrapingResponseSerializer
+
+
+import time
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Product  # Import the Product model
+import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+class ScrapeShopifyData(APIView):
+    def post(self, request):
+        niche = request.data.get("niche")
+        city = request.data.get("city")
+        country = request.data.get("country")
+
+        if not all([niche, city, country]):
+            return Response({"message": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            urls = self.scrape_shopify_urls(niche, city, country)
+            processed_urls = [self.process_url(url) for url in urls]
+            product_details = self.scrape_product_details(processed_urls)
+            self.save_to_db(product_details)
+            return Response({
+                "message": "Scraping completed successfully.",
+                "data": product_details
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def scrape_shopify_urls(self, niche, city, country):
+        options = Options()
+        options.add_argument(
+            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
+
+        driver = webdriver.Chrome(service=Service(), options=options)
+        driver.get('https://www.google.com')
+        search_box = driver.find_element(By.NAME, "q")
+        search_query = f'inurl:myshopify.com {niche} in {city},{country}'
+        search_box.send_keys(search_query)
+        search_box.send_keys(Keys.RETURN)
+        time.sleep(2)
+
+        urls = []
+        links = driver.find_elements(By.CSS_SELECTOR, "a")
+        for link in links:
+            url = link.get_attribute("href")
+            if url and "myshopify.com/" in url:
+                urls.append(url)
+
+        driver.quit()
+        return list(set(urls))
+
+    def process_url(self, url):
+        parsed_url = urlparse(url)
+        domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+        return f"{domain}/sitemap.xml"
+
+    def scrape_product_details(self, processed_urls):
+        product_details = []
+        for url in processed_urls:
+            product_data = self.scrape_product_from_sitemap(url)
+            product_details.extend(product_data)
+        return product_details
+
+    @staticmethod
+    def get_with_retry(url, timeout=10):
+        session = requests.Session()
+        retries = Retry(
+            total=5,
+            backoff_factor=1,
+            allowed_methods=["HEAD", "GET", "OPTIONS"],
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(max_retries=retries)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+
+        try:
+            response = session.get(url, timeout=timeout)
+            return response
+        except requests.exceptions.RequestException as e:
+            print(f"Request failed for {url}: {e}")
             return None
 
-        # Function to scrape product details
-        def scrape_product_details(product_url):
-            product_data = {
-                "url": product_url,
-                "price": None,
-                "meta_title": None,
-                "meta_description": None,
-                "image_url": None
-            }
-            try:
-                response = requests.get(product_url, timeout=10)
-                if response.status_code == 200:
-                    html = response.text
-                    # Extract price using regex patterns
-                    for pattern in price_patterns:
-                        match = re.search(pattern, html)
-                        if match:
-                            product_data["price"] = match.group()
-                            break
+    def scrape_product_from_sitemap(self, sitemap_url):
+        product_details = []
+        response = self.get_with_retry(sitemap_url)
+        if response and response.status_code == 200:
+            sitemap = BeautifulSoup(response.content, "xml")
+            url_tags = sitemap.find_all("url")
+            for url_tag in url_tags:
+                product_url = url_tag.find("loc").text
+                image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
+                if image_url:
+                    product_data = self.scrape_product_details_from_url(product_url)
+                    product_data["image_url"] = image_url
+                    product_details.append(product_data)
+        else:
+            print(f"Failed to fetch sitemap: {sitemap_url}")
+        return product_details
 
-                    # Extract meta title and description
-                    soup = BeautifulSoup(html, "html.parser")
-                    product_data["meta_title"] = soup.find("title").text if soup.find("title") else None
-                    meta_description = soup.find("meta", attrs={"name": "description"})
-                    product_data["meta_description"] = meta_description["content"] if meta_description else None
-                else:
-                    print(f"Failed to fetch product page: {product_url} (Status Code: {response.status_code})")
-            except requests.exceptions.RequestException as e:
-                print(f"Error fetching product details for {product_url}: {e}")
-            return product_data
+    def scrape_product_details_from_url(self, product_url):
+        product_data = {
+            "url": product_url,
+            "title": None,
+            "description": None,
+            "image_url": None,
+            "price": None,
+            "city": "City",
+            "country": "Country",
+            "niche": "Niche"
+        }
 
-        # Function to process product sitemaps
-        def process_product_sitemap(sitemap_url):
-            product_details = []
-            sitemap = fetch_sitemap(sitemap_url)
-            if sitemap:
-                for url_tag in sitemap.find_all("url"):
-                    try:
-                        product_url = url_tag.find("loc").text
-                        image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
-                        if image_url:  # Only proceed if image_url is present
-                            product_data = scrape_product_details(product_url)
-                            product_data["image_url"] = image_url
-                            product_details.append(product_data)
-                    except Exception as e:
-                        print(f"Error processing product URL: {e}")
-            return product_details
+        try:
+            response = requests.get(product_url, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, "html.parser")
+                product_data["title"] = soup.find("title").text if soup.find("title") else None
+                meta_description = soup.find("meta", attrs={"name": "description"})
+                product_data["description"] = meta_description["content"] if meta_description else None
+                product_data['price'] = self.generate_product_price(product_data["title"], product_data["description"])
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching product details for {product_url}: {e}")
+        return product_data
 
-        # Main logic to process sitemaps and gather all product details
-        parent_sitemap = fetch_sitemap(parent_sitemap_url)
-        all_product_details = []
-        if parent_sitemap:
-            product_sitemaps = [
-                sitemap.find("loc").text for sitemap in parent_sitemap.find_all("sitemap")
-                if "products" in sitemap.find("loc").text
-            ]
-            for product_sitemap_url in product_sitemaps:
-                print(f"Processing sitemap: {product_sitemap_url}")
-                all_product_details.extend(process_product_sitemap(product_sitemap_url))
+    def generate_product_price(self, product_title, product_description):
+        return "$99.99"
 
-        return Response(all_product_details, status=status.HTTP_200_OK)
+    def save_to_db(self, product_details):
+        for product in product_details:
+            Product.objects.create(
+                url=product['url'],
+                title=product['title'],
+                description=product['description'],
+                image_url=product['image_url'],
+                price=product['price'],
+                city=product['city'],
+                country=product['country'],
+                niche=product['niche']
+            )

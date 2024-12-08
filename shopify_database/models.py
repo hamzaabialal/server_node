@@ -14,15 +14,21 @@ from django.db import models
 
 from django.db import models
 
+# models.py
+from django.db import models
+
 class Product(models.Model):
-    url = models.URLField()
-    title = models.CharField(max_length=255, null=True)
-    description = models.TextField(null=True)
-    image_url = models.URLField(null=True)
-    price = models.CharField(max_length=100, null=True)
-    city = models.CharField(max_length=100)
-    country = models.CharField(max_length=100)
-    niche = models.CharField(max_length=100)
+    url = models.URLField(null=True, blank=True)
+    title = models.CharField(max_length=255, null=True, blank=True, default='No title')
+    description = models.TextField(null=True, blank=True, default="")
+    image_url = models.URLField(null=True, blank=True,default="")
+    price = models.CharField(max_length=100, null=True, blank=True, default="")
+    city = models.CharField(max_length=100, null=True, blank=True, default="")
+    country = models.CharField(max_length=100, null=True, blank=True, default="")
+    niche = models.CharField(max_length=100, null=True, blank=True , default="")
+
+    def __str__(self):
+        return self.title
 
 
 

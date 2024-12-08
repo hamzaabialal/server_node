@@ -6,6 +6,11 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'  # or specify the fields you want to include
 
+class ScrapingResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = '__all__'  # or specify the fields you want to include
+
     def create(self, validated_data):
         db = self.context.get('db', 'default')  # Get the db from the context
         return Product.objects.using(db).create(**validated_data)
