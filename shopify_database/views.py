@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from requests.adapters import HTTPAdapter
 from rest_framework.decorators import action
+from setuptools import logging
 from urllib3 import Retry
 
 from .serializers import ProductSerializer, ScrapingResponseSerializer
@@ -649,6 +650,10 @@ import time
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import logging
+
+# Logger setup (add this at the top of your file)
+logger = logging.getLogger(__name__)
 
 class ScrapeShopifyData(APIView):
     def post(self, request):
@@ -659,127 +664,193 @@ class ScrapeShopifyData(APIView):
         if not all([niche, city, country]):
             return Response({"message": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
 
+        from selenium import webdriver
+        from selenium.webdriver.chrome.service import Service
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+
+        # Use webdriver-manager to get the correct version of chromedriver
+        chrome_driver_path = ChromeDriverManager().install()
+
+        # Create the Service object with the path from webdriver-manager
+        service = Service(executable_path=chrome_driver_path)
+
+        # Set up Chrome options
+        options = Options()
+        options.add_argument('--headless')  # Run in headless mode (remove if you want GUI)
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-gpu')
+
+        # Initialize WebDriver
+        driver = webdriver.Chrome(service=service, options=options)
+
+        # Open Google
+        driver.get("https://www.google.com")
+
+        # Print the title of the page to verify it loaded correctly
+        print(driver.title)  # Should print "Google"
+
+        # Close the driver
+
+        urls = []
         try:
-            urls = self.scrape_shopify_urls(niche, city, country)
-            processed_urls = [self.process_url(url) for url in urls]
-            product_details = self.scrape_product_details(processed_urls)
-            self.save_to_db(product_details)
+            driver.get('https://www.google.com')
+            search_box = driver.find_element(By.NAME, "q")
+            search_query = f'inurl:myshopify.com {niche} in {city},{country}'
+            search_box.send_keys(search_query)
+            search_box.send_keys(Keys.RETURN)
+            time.sleep(2)  # Not ideal, use WebDriverWait instead
+
+            # Extract URLs from search results
+            links = driver.find_elements(By.CSS_SELECTOR, "a")
+            for link in links:
+                url = link.get_attribute("href")
+                if url and "myshopify.com/" in url:
+                    urls.append(url)
+
+            urls = list(set(urls))  # Remove duplicates
+        finally:
+            driver.quit()
+
+        processed_urls = []
+        for url in urls:
+            parsed_url = urlparse(url)
+            domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
+            sitemap_url = f"{domain}/sitemap.xml"
+            processed_urls.append(sitemap_url)
+
+        print(processed_urls)
+
+        try:
+            all_product_details = []
+            total_sitemaps = len(processed_urls)
+            start_time = time.time()
+
+            for idx, sitemap_url in enumerate(processed_urls):
+                remaining_sitemaps = total_sitemaps - idx
+                print(f"Processing parent sitemap: {sitemap_url} ({idx + 1}/{total_sitemaps}). {remaining_sitemaps} sitemaps left.")
+                parent_sitemap = self.fetch_sitemap(sitemap_url)
+                if parent_sitemap:
+                    product_sitemaps = [sitemap.find("loc").text for sitemap in parent_sitemap.find_all("sitemap") if "products" in sitemap.find("loc").text]
+                    total_urls = len(product_sitemaps)
+                    for url_idx, product_sitemap_url in enumerate(product_sitemaps):
+                        remaining_urls = total_urls - url_idx
+                        print(f"Processing product sitemap: {product_sitemap_url} ({url_idx + 1}/{total_urls}). {remaining_urls} URLs left.")
+                        all_product_details.extend(self.process_product_sitemap(product_sitemap_url, city, niche, country))
+
+                        elapsed_time = time.time() - start_time
+                        avg_time_per_url = elapsed_time / (idx * total_urls + url_idx + 1)
+                        estimated_time_left = avg_time_per_url * (total_sitemaps * total_urls - (idx * total_urls + url_idx + 1))
+                        print(f"Estimated time left: {estimated_time_left:.2f} seconds.")
+                else:
+                    print(f"Skipping {sitemap_url} as it did not return a valid response.")
+                print(f"Completed {sitemap_url}. {remaining_sitemaps - 1} sitemaps left.")
+
+            self.save_to_db(all_product_details)
+
             return Response({
                 "message": "Scraping completed successfully.",
-                "data": product_details
+                "data": all_product_details
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
+            logger.error(f"Error during scraping: {e}")
             return Response({"message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    def scrape_shopify_urls(self, niche, city, country):
-        options = Options()
-        options.add_argument(
-            'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36')
-
-        driver = webdriver.Chrome(service=Service(), options=options)
-        driver.get('https://www.google.com')
-        search_box = driver.find_element(By.NAME, "q")
-        search_query = f'inurl:myshopify.com {niche} in {city},{country}'
-        search_box.send_keys(search_query)
-        search_box.send_keys(Keys.RETURN)
-        time.sleep(2)
-
-        urls = []
-        links = driver.find_elements(By.CSS_SELECTOR, "a")
-        for link in links:
-            url = link.get_attribute("href")
-            if url and "myshopify.com/" in url:
-                urls.append(url)
-
-        driver.quit()
-        return list(set(urls))
-
-    def process_url(self, url):
-        parsed_url = urlparse(url)
-        domain = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        return f"{domain}/sitemap.xml"
-
-    def scrape_product_details(self, processed_urls):
-        product_details = []
-        for url in processed_urls:
-            product_data = self.scrape_product_from_sitemap(url)
-            product_details.extend(product_data)
-        return product_details
-
-    @staticmethod
-    def get_with_retry(url, timeout=10):
-        session = requests.Session()
-        retries = Retry(
-            total=5,
-            backoff_factor=1,
-            allowed_methods=["HEAD", "GET", "OPTIONS"],
-            status_forcelist=[429, 500, 502, 503, 504],
-        )
-        adapter = HTTPAdapter(max_retries=retries)
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
-
+    def generate_product_price(self, product_title, product_description, country_name, city_name, niche, api_key):
         try:
-            response = session.get(url, timeout=timeout)
-            return response
-        except requests.exceptions.RequestException as e:
-            print(f"Request failed for {url}: {e}")
+            client = together.Client(api_key=api_key)
+
+            prompt = (
+                "You are a pricing expert. Based on the following details, provide the expected price of the product "
+                "ONLY as a number followed by the currency sign. Do not include any extra text or words.\n\n"
+                f"Product Title: {product_title}\n"
+                f"Product Description: {product_description}\n"
+                f"Country: {country_name}\n"
+                f"City: {city_name}\n"
+                f"Niche: {niche}\n\n"
+                "What is the expected price of the product?"
+            )
+
+            response = client.chat.completions.create(
+                model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=10,
+                temperature=0.2
+            )
+
+            price = response.choices[0].message.content.strip()
+            return price
+
+        except Exception as e:
+            logger.error(f"Error generating price with Together AI: {e}")
             return None
 
-    def scrape_product_from_sitemap(self, sitemap_url):
-        product_details = []
-        response = self.get_with_retry(sitemap_url)
-        if response and response.status_code == 200:
-            sitemap = BeautifulSoup(response.content, "xml")
-            url_tags = sitemap.find_all("url")
-            for url_tag in url_tags:
-                product_url = url_tag.find("loc").text
-                image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
-                if image_url:
-                    product_data = self.scrape_product_details_from_url(product_url)
-                    product_data["image_url"] = image_url
-                    product_details.append(product_data)
-        else:
-            print(f"Failed to fetch sitemap: {sitemap_url}")
-        return product_details
+    def fetch_sitemap(self, url):
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                return BeautifulSoup(response.content, "xml")
+            else:
+                logger.error(f"Failed to fetch sitemap: {url} (Status Code: {response.status_code})")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching sitemap: {url} - {e}")
+        return None
 
-    def scrape_product_details_from_url(self, product_url):
+    def scrape_product_details(self, product_url, city, niche, country):
         product_data = {
             "url": product_url,
             "title": None,
             "description": None,
             "image_url": None,
             "price": None,
-            "city": "City",
-            "country": "Country",
-            "niche": "Niche"
+            "city": city,
+            "country": country,
+            "niche": niche
         }
-
         try:
             response = requests.get(product_url, timeout=10)
             if response.status_code == 200:
-                soup = BeautifulSoup(response.text, "html.parser")
+                html = response.text
+                soup = BeautifulSoup(html, "html.parser")
                 product_data["title"] = soup.find("title").text if soup.find("title") else None
                 meta_description = soup.find("meta", attrs={"name": "description"})
                 product_data["description"] = meta_description["content"] if meta_description else None
-                product_data['price'] = self.generate_product_price(product_data["title"], product_data["description"])
+                product_data['price'] = self.generate_product_price(product_data["title"], product_data["description"], country,
+                                                               city, niche, "8e20cf957a59cbfa992c3587d9f684ee0b7209e5b00ac4be07ecce36c0cdf92c")
+            else:
+                logger.error(f"Failed to fetch product page: {product_url} (Status Code: {response.status_code})")
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching product details for {product_url}: {e}")
+            logger.error(f"Error fetching product details for {product_url}: {e}")
         return product_data
 
-    def generate_product_price(self, product_title, product_description):
-        return "$99.99"
+    def process_product_sitemap(self, sitemap_url, city, niche, country):
+        product_details = []
+        sitemap = self.fetch_sitemap(sitemap_url)
+        if sitemap:
+            url_tags = sitemap.find_all("url")
+            total_urls = len(url_tags)
+            if total_urls == 0:
+                logger.warning("No URLs found in the sitemap.")
+                return product_details
+
+            for index, url_tag in enumerate(url_tags):
+                try:
+                    product_url = url_tag.find("loc").text
+                    image_url = url_tag.find("image:loc").text if url_tag.find("image:loc") else None
+                    if image_url:
+                        # Make sure city, niche, and country are passed
+                        product_data = self.scrape_product_details(product_url, city, niche, country)
+                        product_data["image_url"] = image_url
+                        product_details.append(product_data)
+
+                    percentage_done = (index + 1) / total_urls * 100
+                    print(f"Processed {index + 1}/{total_urls} URLs ({percentage_done:.2f}% completed).")
+                except Exception as e:
+                    logger.error(f"Error processing product URL: {e}")
+
+        return product_details
 
     def save_to_db(self, product_details):
-        for product in product_details:
-            Product.objects.create(
-                url=product['url'],
-                title=product['title'],
-                description=product['description'],
-                image_url=product['image_url'],
-                price=product['price'],
-                city=product['city'],
-                country=product['country'],
-                niche=product['niche']
-            )
+        products = [Product(**product) for product in product_details]
+        Product.objects.bulk_create(products)
