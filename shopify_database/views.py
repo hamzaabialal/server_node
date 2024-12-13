@@ -664,34 +664,17 @@ class ScrapeShopifyData(APIView):
         if not all([niche, city, country]):
             return Response({"message": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
 
-        from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.chrome.options import Options
-        from webdriver_manager.chrome import ChromeDriverManager
+        # Setup Chrome options
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Run in headless mode (no GUI)
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
 
-        # Use webdriver-manager to get the correct version of chromedriver
-        options = Options()
-        options.add_argument('--headless')  # Ensure Chrome runs in headless mode
-        options.add_argument('--no-sandbox')  # Required for running in some environments (e.g., Docker, VMs)
-        options.add_argument('--disable-dev-shm-usage')  # Disable /dev/shm usage (useful in containers or VMs)
-        options.add_argument('--remote-debugging-port=9222')  # Enable debugging port
-        options.add_argument('--disable-gpu')  # Disable GPU acceleration (helpful in headless mode)
-        options.add_argument('--disable-software-rasterizer')  # Disable software rendering
-
-        # Add your ChromeDriver service
-        chrome_driver_path = ChromeDriverManager().install()
-        service = Service(executable_path=chrome_driver_path)
-
-        driver = webdriver.Chrome(service=service, options=options)
-
-
-        # Open Google
-        driver.get("https://www.google.com")
-
-        # Print the title of the page to verify it loaded correctly
-        print(driver.title)  # Should print "Google"
-
-        # Close the driver
+        # Connect to Selenium Hub
+        driver = webdriver.Remote(
+            command_executor='http://selenium-hub:4444/wd/hub',
+            options=chrome_options
+        )
 
         urls = []
         try:
@@ -700,7 +683,9 @@ class ScrapeShopifyData(APIView):
             search_query = f'inurl:myshopify.com {niche} in {city},{country}'
             search_box.send_keys(search_query)
             search_box.send_keys(Keys.RETURN)
-            time.sleep(2)  # Not ideal, use WebDriverWait instead
+
+            # Wait for results to load
+            time.sleep(2)  # Replace with WebDriverWait for better handling
 
             # Extract URLs from search results
             links = driver.find_elements(By.CSS_SELECTOR, "a")

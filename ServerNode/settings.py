@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-%vv9jqllmb49l#9ee64!z%@vhlmv2s41b5--j!(s!^grhx9#rr
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["45.90.122.221"]
+ALLOWED_HOSTS = ["45.90.122.221", "127.0.0.1"]
 
 
 # Application definition
@@ -90,7 +90,7 @@ DATABASES = {
         'NAME': 'node1_db',  # Use the database for the current node
         'USER': 'node1_user',
         'PASSWORD': '12345',
-        'HOST': 'localhost',
+        'HOST': 'postgres',
         'PORT': '5432',
     },
     'node2': {
