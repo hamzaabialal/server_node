@@ -670,20 +670,20 @@ class ScrapeShopifyData(APIView):
         from webdriver_manager.chrome import ChromeDriverManager
 
         # Use webdriver-manager to get the correct version of chromedriver
-        chrome_driver_path = ChromeDriverManager().install()
+        options = Options()
+        options.add_argument('--headless')  # Ensure Chrome runs in headless mode
+        options.add_argument('--no-sandbox')  # Required for running in some environments (e.g., Docker, VMs)
+        options.add_argument('--disable-dev-shm-usage')  # Disable /dev/shm usage (useful in containers or VMs)
+        options.add_argument('--remote-debugging-port=9222')  # Enable debugging port
+        options.add_argument('--disable-gpu')  # Disable GPU acceleration (helpful in headless mode)
+        options.add_argument('--disable-software-rasterizer')  # Disable software rendering
 
-        # Create the Service object with the path from webdriver-manager
+        # Add your ChromeDriver service
+        chrome_driver_path = ChromeDriverManager().install()
         service = Service(executable_path=chrome_driver_path)
 
-        # Set up Chrome options
-        options = Options()
-        options.add_argument('--no-sandbox')
-        # Remove headless option for debugging purposes
-
-        options.add_argument('--disable-gpu')
-
-        # Initialize WebDriver
         driver = webdriver.Chrome(service=service, options=options)
+
 
         # Open Google
         driver.get("https://www.google.com")
