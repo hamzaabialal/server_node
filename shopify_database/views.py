@@ -677,8 +677,9 @@ class ScrapeShopifyData(APIView):
 
         # Set up Chrome options
         options = Options()
-        options.add_argument('--headless')  # Run in headless mode (remove if you want GUI)
         options.add_argument('--no-sandbox')
+        # Remove headless option for debugging purposes
+
         options.add_argument('--disable-gpu')
 
         # Initialize WebDriver
