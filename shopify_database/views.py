@@ -656,62 +656,85 @@ import logging
 logger = logging.getLogger(__name__)
 
 class ScrapeShopifyData(APIView):
-    def post(self, request):
-        niche = request.data.get("niche")
-        city = request.data.get("city")
-        country = request.data.get("country")
+    import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-        if not all([niche, city, country]):
-            return Response({"message": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
+def post(self, request):
+    # Extract parameters from the request
+    niche = request.data.get("niche")
+    city = request.data.get("city")
+    country = request.data.get("country")
 
-        from selenium import webdriver
-        from selenium.webdriver.chrome.service import Service
-        from selenium.webdriver.chrome.options import Options
-        from webdriver_manager.chrome import ChromeDriverManager
+    # Check if all parameters are provided
+    if not all([niche, city, country]):
+        return Response({"message": "Missing parameters."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Use webdriver-manager to get the correct version of chromedriver
-        options = Options()
-        options.add_argument('--headless')  # Ensure Chrome runs in headless mode
-        options.add_argument('--no-sandbox')  # Required for running in some environments (e.g., Docker, VMs)
-        options.add_argument('--disable-dev-shm-usage')  # Disable /dev/shm usage (useful in containers or VMs)
-        options.add_argument('--remote-debugging-port=9222')  # Enable debugging port
-        options.add_argument('--disable-gpu')  # Disable GPU acceleration (helpful in headless mode)
-        options.add_argument('--disable-software-rasterizer')  # Disable software rendering
+    # Setup Chrome options
+    options = Options()
+    options.add_argument('--headless')  # Ensure Chrome runs in headless mode
+    options.add_argument('--no-sandbox')  # Required for some environments (e.g., Docker, VMs)
+    options.add_argument('--disable-dev-shm-usage')  # Disable /dev/shm usage (helpful in containers or VMs)
+    options.add_argument('--disable-gpu')  # Disable GPU acceleration (helpful in headless mode)
+    options.add_argument('--remote-debugging-port=9222')  # Enable debugging port
 
-        # Add your ChromeDriver service
-        chrome_driver_path = ChromeDriverManager().install()
-        service = Service(executable_path=chrome_driver_path)
+    # Install ChromeDriver using webdriver-manager
+    chrome_driver_path = ChromeDriverManager().install()
+    service = Service(executable_path=chrome_driver_path)
 
-        driver = webdriver.Chrome(service=service, options=options)
+    # Initialize the WebDriver
+    driver = webdriver.Chrome(service=service, options=options)
 
-
+    try:
         # Open Google
         driver.get("https://www.google.com")
 
-        # Print the title of the page to verify it loaded correctly
-        print(driver.title)  # Should print "Google"
+        # Wait for the search box to be interactable
+        search_box = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.NAME, "q"))
+        )
 
-        # Close the driver
+        # Create the search query
+        search_query = f'inurl:myshopify.com {niche} in {city},{country}'
+        
+        # Scroll the search box into view to ensure it's interactable
+        driver.execute_script("arguments[0].scrollIntoView(true);", search_box)
 
+        # Send the search query to the search box and press Enter
+        search_box.send_keys(search_query)
+        search_box.send_keys(Keys.RETURN)
+
+        # Wait for results to load (you can adjust the wait time or use WebDriverWait for specific elements)
+        time.sleep(2)  # Replace this with WebDriverWait for better handling
+
+        # Extract the links from the search results
         urls = []
-        try:
-            driver.get('https://www.google.com')
-            search_box = driver.find_element(By.NAME, "q")
-            search_query = f'inurl:myshopify.com {niche} in {city},{country}'
-            search_box.send_keys(search_query)
-            search_box.send_keys(Keys.RETURN)
-            time.sleep(2)  # Not ideal, use WebDriverWait instead
+        links = driver.find_elements(By.CSS_SELECTOR, "a")
 
-            # Extract URLs from search results
-            links = driver.find_elements(By.CSS_SELECTOR, "a")
-            for link in links:
-                url = link.get_attribute("href")
-                if url and "myshopify.com/" in url:
-                    urls.append(url)
+        for link in links:
+            url = link.get_attribute("href")
+            if url and "myshopify.com/" in url:
+                urls.append(url)
 
-            urls = list(set(urls))  # Remove duplicates
-        finally:
-            driver.quit()
+        # Remove duplicates from the list of URLs
+        urls = list(set(urls))
+        
+        return Response({"urls": urls}, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        # Log the exception if necessary
+        print(f"Error: {e}")
+        return Response({"message": "An error occurred."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    finally:
+        # Quit the driver after execution
+        driver.quit()
 
         processed_urls = []
         for url in urls:
